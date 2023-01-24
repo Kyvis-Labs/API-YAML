@@ -35,14 +35,22 @@ functions:
         path: "{{var::apiName}}/data"
         type: jsonExpand
       - action: function
+        type: condition
         items: "{{jsonPath::$.[*]}}"
-        function: deviceInfo
+        conditionKey: "{{item | tagPath}}"
+        conditionOperator: neq
+        conditionValue: "_"
+        trueFunction: deviceInfo
         variables:
           - name: deviceId
             value: "{{item | tagPath}}"
       - action: function
+        type: condition
         items: "{{jsonPath::$.[*]}}"
-        function: deviceState
+        conditionKey: "{{item | tagPath}}"
+        conditionOperator: neq
+        conditionValue: "_"
+        trueFunction: deviceState
         variables:
           - name: deviceId
             value: "{{item | tagPath}}"
