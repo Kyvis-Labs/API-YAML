@@ -1,0 +1,164 @@
+version: 1
+
+api:
+  name: Rachio
+  description: Interfaces with Rachio irrigation system 
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/Rachio
+
+variables:
+  baseUrl:
+    default: https://api.rach.io/1/public
+    hidden: true
+    
+authType: 
+  type: bearer
+  
+headers:
+  - key: Content-Type
+    value: application/json
+    
+webhooks:
+  device:
+    check:
+      url: "{{var::baseUrl}}/notification/webhook/{{var::handler.id}}"
+      method: get
+    add:
+      url: "{{var::baseUrl}}/notification/webhook"
+      method: post
+      body:
+        type: json
+        value: |
+          {"device":
+            {"id":"{{var::handler.deviceId}}"}, 
+            "url":"{{var::handler.url}}",
+            "eventTypes":[{"id":"5"}, {"id":"10"}]
+          }
+      actions:
+        - action: variable
+          name: id
+          value: "{{jsonPath::$.id}}"
+    remove:
+      url: "{{var::baseUrl}}/notification/webhook/{{var::webhook.id}}"
+      method: delete
+    handle:
+      actions:
+        - action: tag
+          path: "{{var::apiName}}/data/person/devices/{{var::webhook.key}}"
+          type: switch
+          cases:
+            - conditionKey: "{{jsonPath::$.subType}}"
+              conditionOperator: in
+              conditionValue: "{{array::[OFFLINE, ONLINE]}}"
+              variables:
+                - name: path
+                  value: status
+                - name: value
+                  value: "{{jsonPath::$.subType}}"
+            - conditionKey: "{{jsonPath::$.subType}}"
+              conditionOperator: in
+              conditionValue: "{{array::[ZONE_STARTED, ZONE_COMPLETED]}}"
+              variables:
+                - name: path
+                  value: "zones/{{jsonPath::$.zoneName}}/status"
+                - name: value
+                  value: "{{jsonPath::$.subType}}"
+        
+functions:
+  personInfo:
+    url: "{{var::baseUrl}}/person/info"
+    method: get
+    actions:
+      - action: variable
+        name: id
+        value: "{{jsonPath::$.id}}"
+  webhooks:
+    depends: personInfo
+    url: "{{var::baseUrl}}/person/{{var::personInfo.id}}"
+    method: get
+    schedule:
+      type: timer
+      duration: 0
+    actions:
+      - action: webhook
+        items: "{{jsonPath::$.devices[*]}}"
+        name: device
+        key: "{{jsonPath::item::$.name}}"
+        variables:
+          - name: deviceId
+            value: "{{jsonPath::item::$.id}}"
+  person:
+    depends: personInfo
+    url: "{{var::baseUrl}}/person/{{var::personInfo.id}}"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/person"
+        type: jsonExpand
+        udts:            
+          - id: zone
+            defPath: "{{var::apiName}}/zone"
+            items: "{{jsonPath::$.devices[*].zones[*]}}"
+            path: "{{item | tagPath}}"
+            name: "{{jsonPath::item::$.name}}"
+            tags: 
+              - name: status
+                dataType: String
+              - path: start
+                name: runDuration
+                dataType: Int4
+                defaultValue: 0
+                handler:
+                  write: true
+              - path: start
+                name: zoneStart
+                dataType: Boolean
+                defaultValue: false
+                handler:
+                  function: zoneStart
+                  reset: true
+                  variables:
+                    - name: id
+                      tagPath: "{{var::handler.parentPath}}/id"
+                    - name: duration
+                      tagPath: "{{var::handler.parentPath}}/start/runDuration"
+          - id: device
+            defPath: "{{var::apiName}}/device"
+            items: "{{jsonPath::$.devices[*]}}"
+            path: "{{item | tagPath}}"
+            name: "{{jsonPath::item::$.name}}"
+            tags: 
+              - name: stopWater
+                dataType: Boolean
+                defaultValue: false
+                handler:
+                  function: stopWater
+                  reset: true
+                  variables:
+                    - name: id
+                      tagPath: "{{var::handler.parentPath}}/id"
+  stopWater:
+    url: "{{var::baseUrl}}/device/stop_water"
+    method: put
+    body:
+      type: json
+      params:
+        - name: id
+          value: "{{var::handler.id}}"
+  zoneStart:
+    url: "{{var::baseUrl}}/zone/start"
+    method: put
+    body:
+      type: json
+      params:
+        - name: id
+          value: "{{var::handler.id}}"
+        - name: duration
+          value: "{{var::handler.duration}}"

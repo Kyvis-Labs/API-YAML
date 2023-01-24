@@ -1,0 +1,74 @@
+version: 1
+
+api:
+  name: Tesla
+  description: Interfaces with Tesla vehicles
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/Tesla
+    
+variables:
+  baseUrl:
+    default: https://owner-api.teslamotors.com/api/1
+    hidden: true
+
+authType: 
+  type: oauth2
+  grantType: authorizationCode
+  authUrl: https://auth.tesla.com/oauth2/v3/authorize
+  accessTokenUrl: https://auth.tesla.com/oauth2/v3/token
+  redirectUrl: https://auth.tesla.com/void/callback
+  scope: openid email offline_access
+  clientId: ownerapi
+  pkce: true
+  authCode: true
+
+headers:
+  - key: Content-Type
+    value: application/json
+  
+functions:
+  vehicles:
+    url: "{{var::baseUrl}}/vehicles"
+    method: get
+    schedule:
+      type: timer
+      duration: 15
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/vehicles"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.response[*]}}"
+            name: "{{jsonPath::item::$.id}}"
+      - action: function
+        type: condition
+        items: "{{jsonPath::$.response[*]}}"
+        conditionKey: "{{jsonPath::item::$.state}}"
+        conditionOperator: eq
+        conditionValue: online
+        falseFunction: wake
+        trueFunction: vehicleData
+        variables:
+          - name: vehicleId
+            value: "{{jsonPath::item::$.id}}"
+        retry:
+          duration: 30
+          unit: seconds
+          max: 5
+
+  vehicleData:
+    url: "{{var::baseUrl}}/vehicles/{{var::handler.vehicleId}}/vehicle_data"
+    method: get
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/vehicles/response/{{var::handler.vehicleId}}"
+        filter: "{{jsonPath::$.response}}"
+        type: jsonExpand
+        
+  wake:
+    url: "{{var::baseUrl}}/vehicles/{{var::handler.vehicleId}}/wake_up"
+    method: post

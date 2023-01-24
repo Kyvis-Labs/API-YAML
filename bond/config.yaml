@@ -1,0 +1,122 @@
+version: 1
+
+api:
+  name: Bond Home
+  description: Interfaces with Bond Home bridge
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/Bond-Home
+
+variables:
+  ipAddress:
+    required: true
+  token:
+    required: true
+    sensitive: true
+  
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: BOND-Token
+    value: "{{var::token}}"
+        
+functions:
+  devices:
+    url: "http://{{var::ipAddress}}/v2/devices"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand
+      - action: function
+        items: "{{jsonPath::$.[*]}}"
+        function: deviceInfo
+        variables:
+          - name: deviceId
+            value: "{{item | tagPath}}"
+      - action: function
+        items: "{{jsonPath::$.[*]}}"
+        function: deviceState
+        variables:
+          - name: deviceId
+            value: "{{item | tagPath}}"
+
+  deviceInfo:
+    url: "http://{{var::ipAddress}}/v2/devices/{{var::handler.deviceId}}"
+    method: get
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/{{var::handler.deviceId}}"
+        type: jsonExpand
+
+  deviceState:
+    url: "http://{{var::ipAddress}}/v2/devices/{{var::handler.deviceId}}/state"
+    method: get
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/{{var::handler.deviceId}}"
+        type: jsonExpand
+        tags: 
+          - name: light
+            dataType: Int4
+            addIfNotExists: false
+            handler: 
+              function: deviceAction
+              variables:
+                - name: action
+                  value: ToggleLight
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[-2]}}"
+          - name: power
+            dataType: Int4
+            addIfNotExists: false
+            handler: 
+              function: deviceAction
+              variables:
+                - name: action
+                  value: TogglePower
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[-2]}}"
+          - name: direction
+            dataType: Int4
+            addIfNotExists: false
+            handler: 
+              function: deviceAction
+              variables:
+                - name: action
+                  value: ToggleDirection
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[-2]}}"
+          - name: speed
+            dataType: Int4
+            addIfNotExists: false
+            handler: 
+              function: deviceActionValue
+              variables:
+                - name: action
+                  value: SetSpeed
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[-2]}}"
+        
+  deviceAction:
+    url: "http://{{var::ipAddress}}/v2/devices/{{var::handler.deviceId}}/actions/{{var::handler.action}}"
+    method: put
+    body:
+      type: json
+      value: {}
+  
+  deviceActionValue:
+    url: "http://{{var::ipAddress}}/v2/devices/{{var::handler.deviceId}}/actions/{{var::handler.action}}"
+    method: put
+    body:
+      type: json
+      value: | 
+        {
+          "argument": {{var::handler.value}}
+        }

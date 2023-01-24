@@ -1,0 +1,59 @@
+version: 1
+
+api:
+  name: DirecTV
+  description: Interfaces with DirecTV Genie
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/DirecTV
+
+variables:
+  ipAddress:
+    required: true
+  port:
+    default: 8080
+  
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: "*/*"
+        
+functions:
+  locations:
+    url: "http://{{var::ipAddress}}:{{var::port}}/info/getLocations"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.locations[*]}}"
+            name: "{{jsonPath::item::$.locationName}}"
+      - action: function
+        items: "{{jsonPath::$.locations[*]}}"
+        function: locationTuned
+        variables:
+          - name: clientAddr
+            value: "{{jsonPath::item::$.clientAddr}}"
+          - name: locationName
+            value: "{{jsonPath::item::$.locationName}}"
+
+  locationTuned:
+    url: "http://{{var::ipAddress}}:{{var::port}}/tv/getTuned"
+    method: get
+    allowedErrorCodes:
+      - code: 500
+    params:
+      - name: clientAddr
+        value: "{{var::handler.clientAddr}}"
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/locations/{{var::handler.locationName}}"
+        type: jsonExpand

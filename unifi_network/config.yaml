@@ -1,0 +1,55 @@
+version: 1
+
+api:
+  name: UniFi Network
+  description: Interfaces with UniFi Network by Ubiquiti Networks
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/UniFiNetwork
+    
+httpsVerification: false
+
+variables:
+  baseUrl:
+    required: true
+    
+authType: 
+  type: session
+  url: "{{var::baseUrl}}/api/auth/login"
+  params:
+    - name: remember
+      value: true
+  
+functions:
+  clients:
+    url: "{{var::baseUrl}}/proxy/network/api/s/default/stat/sta"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/clients"
+        filter: "{{jsonPath::$.data}}"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.[*]}}"
+            name: "{{jsonPath::item::$.name}}"
+  devices:
+    url: "{{var::baseUrl}}/proxy/network/api/s/default/stat/device"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/devices"
+        filter: "{{jsonPath::$.data}}"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.[*]}}"
+            name: "{{jsonPath::item::$.name}}"

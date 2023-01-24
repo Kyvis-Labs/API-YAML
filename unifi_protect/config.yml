@@ -1,0 +1,36 @@
+version: 1
+
+api:
+  name: UniFi Protect
+  description: Interfaces with UniFi Protect by Ubiquiti Networks
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/UniFiProtect
+    
+httpsVerification: false
+
+variables:
+  baseUrl:
+    required: true
+    
+authType: 
+  type: session
+  url: "{{var::baseUrl}}/api/auth/login"
+  params:
+    - name: remember
+      value: true
+  
+functions:
+  cameras:
+    url: "{{var::baseUrl}}/proxy/protect/api/bootstrap"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand

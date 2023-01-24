@@ -1,0 +1,57 @@
+version: 1
+
+api:
+  name: OpenWeatherMap
+  description: Interfaces with OpenWeatherMap for current and forecast data
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/OpenWeatherMap
+    
+variables:
+  appId:
+    required: true
+  cityId:
+    required: true
+  baseUrl:
+    default: https://api.openweathermap.org/data/2.5
+    hidden: true
+  
+functions:
+  currentWeather:
+    url: "{{var::baseUrl}}/weather"
+    method: get
+    params:
+      - name: appid
+        value: "{{var::appId}}"
+      - name: id
+        value: "{{var::cityId}}"
+      - name: units
+        value: imperial
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/current"
+        type: jsonExpand
+  forecast:
+    url: "{{var::baseUrl}}/forecast"
+    method: get
+    params:
+      - name: appid
+        value: "{{var::appId}}"
+      - name: id
+        value: "{{var::cityId}}"
+      - name: units
+        value: imperial
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/forecast"
+        type: jsonExpand

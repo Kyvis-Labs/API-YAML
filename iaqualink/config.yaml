@@ -1,0 +1,140 @@
+version: 1
+
+api:
+  name: iAquaLink
+  description: Interfaces with iAquaLink pool system
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/iAquaLink
+
+variables:
+  apiKey:
+    default: EOOEMOW4YR6QNB07
+    hidden: true
+  loginUrl:
+    default: https://prod.zodiac-io.com/users/v1/login
+    hidden: true
+  devicesUrl:
+    default: https://r-api.iaqualink.net/devices.json
+    hidden: true
+  sessionUrl:
+    default: https://p-api.iaqualink.net/v1/mobile/session.json
+    hidden: true
+
+authType: 
+  type: token
+  url: "{{var::loginUrl}}"
+  usernameKey: email
+  passwordKey: password
+  params:
+    - name: api_key
+      value: "{{var::apiKey}}"
+  expiresIn: 3600
+  tokens:
+    - name: id
+    - name: authentication_token
+    - name: session_id
+  
+headers:
+  - key: Content-Type
+    value: application/json
+        
+functions:
+  devices:
+    url: "{{var::devicesUrl}}"
+    method: get
+    params:
+      - name: api_key
+        value: "{{var::apiKey}}"
+      - name: authentication_token
+        value: "{{var::auth-authentication_token}}"
+      - name: user_id
+        value: "{{var::auth-id}}"
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/devices"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$[*]}}"
+            name: "{{jsonPath::item::$.name}}"
+      - action: function
+        items: "{{jsonPath::$[*]}}"
+        function: deviceHome
+        variables:
+          - name: serial
+            value: "{{jsonPath::item::$.serial_number}}"
+          - name: deviceName
+            value: "{{jsonPath::item::$.name}}"
+      - action: function
+        items: "{{jsonPath::$[*]}}"
+        function: deviceDevices
+        variables:
+          - name: serial
+            value: "{{jsonPath::item::$.serial_number}}"
+          - name: deviceName
+            value: "{{jsonPath::item::$.name}}"
+      - action: function
+        items: "{{jsonPath::$[*]}}"
+        function: deviceOneTouch
+        variables:
+          - name: serial
+            value: "{{jsonPath::item::$.serial_number}}"
+          - name: deviceName
+            value: "{{jsonPath::item::$.name}}"
+        
+  deviceHome:
+    url: "{{var::sessionUrl}}"
+    method: get
+    params:
+      - name: sessionID
+        value: "{{var::auth-session_id}}"
+      - name: serial
+        value: "{{var::handler.serial}}"
+      - name: actionID
+        value: command
+      - name: command
+        value: get_home
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/devices/{{var::handler.deviceName}}"
+        type: jsonExpand
+        
+  deviceDevices:
+    url: "{{var::sessionUrl}}"
+    method: get
+    params:
+      - name: sessionID
+        value: "{{var::auth-session_id}}"
+      - name: serial
+        value: "{{var::handler.serial}}"
+      - name: actionID
+        value: command
+      - name: command
+        value: get_devices
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/devices/{{var::handler.deviceName}}"
+        type: jsonExpand
+        
+  deviceOneTouch:
+    url: "{{var::sessionUrl}}"
+    method: get
+    params:
+      - name: sessionID
+        value: "{{var::auth-session_id}}"
+      - name: serial
+        value: "{{var::handler.serial}}"
+      - name: actionID
+        value: command
+      - name: command
+        value: get_onetouch
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/devices/{{var::handler.deviceName}}"
+        type: jsonExpand

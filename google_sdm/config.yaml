@@ -1,0 +1,237 @@
+version: 1
+
+api:
+  name: Google SDM
+  description: Interfaces with Google Nest using the Smart Device Management API and Google's Pubsub
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/GoogleSDM
+    
+variables:
+  projectId:
+    required: true
+  projectName:
+    required: true
+  baseUrl:
+    default: https://smartdevicemanagement.googleapis.com/v1/enterprises
+    hidden: true
+  webhookBaseUrl:
+    default: https://pubsub.googleapis.com/v1/projects
+    hidden: true
+  webhookSubName:
+    default: ignition-sdm-api
+
+authType: 
+  type: oauth2
+  authUrl: "https://nestservices.google.com/partnerconnections/{{var::projectId}}/auth"
+  accessTokenUrl: https://www.googleapis.com/oauth2/v4/token
+  scope: https://www.googleapis.com/auth/sdm.service https://www.googleapis.com/auth/pubsub
+  grantType: authorizationCode
+
+headers:
+  - key: Content-Type
+    value: application/json
+    
+webhooks:
+  device:
+    key: "{{var::webhookSubName}}"
+    id: "{{var::webhookSubName}}"
+    ttl: 31
+    checkOnStart: true
+    check:
+      url: "{{var::webhookBaseUrl}}/{{var::projectName}}/subscriptions/{{var::webhookSubName}}"
+      method: get
+    add:
+      url: "{{var::webhookBaseUrl}}/{{var::projectName}}/subscriptions/{{var::webhookSubName}}"
+      method: put
+      body:
+        type: json
+        value: |
+          {
+            "topic": "projects/sdm-prod/topics/enterprise-{{var::projectId}}",
+            "pushConfig": {
+              "pushEndpoint": "{{var::webhook.url}}"
+            },
+            "messageRetentionDuration": "600s",
+            "retryPolicy": {
+              "minimumBackoff": "10s",
+              "maximumBackoff": "600s"
+            }
+          }
+    remove:
+      url: "{{var::webhookBaseUrl}}/{{var::projectName}}/subscriptions/{{var::webhookSubName}}"
+      method: delete
+    handle:
+      responseFormat:
+        type: b64Decode
+        value: "{{jsonPath::$.message.data}}"
+      actions:
+        - action: tag
+          path: "{{var::apiName}}/data/devices/{{jsonPath::$.resourceUpdate.name | split::[3]}}/traits"
+          filter: "{{jsonPath::$.resourceUpdate.traits}}"
+          type: jsonExpand
+        - action: tag
+          path: "{{var::apiName}}/data/devices/{{jsonPath::$.resourceUpdate.name | split::[3]}}/traits"
+          filter: "{{jsonPath::$.resourceUpdate.events}}"
+          type: jsonExpand
+        - action: function
+          items: "{{jsonPath::$.resourceUpdate.events[*]}}"
+          function: generateImage
+          variables:
+            - name: tagPath
+              value: "{{var::apiName}}/data/devices/{{jsonPath::$.resourceUpdate.name | split::[3]}}/traits"
+            - name: deviceId
+              value: "{{jsonPath::$.resourceUpdate.name | split::[3]}}"
+            - name: eventId
+              value: "{{jsonPath::item::$.eventId}}"
+  
+functions:
+  devices:
+    url: "{{var::baseUrl}}/{{var::projectId}}/devices"
+    method: get
+    schedule:
+      type: timer
+      duration: 60
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.devices[*]}}"
+            name: "{{jsonPath::item::$.name | split::[3]}}"
+        tags: 
+          - items: "{{jsonPath::$.devices[*]}}"
+            path: "{{item | tagPath}}/traits/sdm.devices.traits.ThermostatMode"
+            name: mode
+            dataType: String
+            addIfNotExists: false
+            handler: 
+              function: thermostatMode
+              variables:
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[3]}}"
+          - items: "{{jsonPath::$.devices[*]}}"
+            path: "{{item | tagPath}}/traits/sdm.devices.traits.ThermostatEco"
+            name: mode
+            dataType: String
+            addIfNotExists: false
+            handler: 
+              function: thermostatEcoMode
+              variables:
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[3]}}"
+          - items: "{{jsonPath::$.devices[*]}}"
+            path: "{{item | tagPath}}/traits/sdm.devices.traits.ThermostatTemperatureSetpoint"
+            name: heatCelsius
+            dataType: Float4
+            addIfNotExists: false
+            handler: 
+              function: temperatureHeat
+              variables:
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[3]}}"
+          - items: "{{jsonPath::$.devices[*]}}"
+            path: "{{item | tagPath}}/traits/sdm.devices.traits.ThermostatTemperatureSetpoint"
+            name: coolCelsius
+            dataType: Float4
+            addIfNotExists: false
+            handler: 
+              function: temperatureCool
+              variables:
+                - name: deviceId
+                  value: "{{var::handler.tagPath | split::[3]}}"
+            
+  thermostatMode:
+    url: "{{var::baseUrl}}/{{var::projectId}}/devices/{{var::handler.deviceId}}:executeCommand"
+    method: post
+    body:
+      type: json
+      value: | 
+        {
+          "command": "sdm.devices.commands.ThermostatMode.SetMode",
+          "params": {
+            "mode": "{{var::handler.value}}"
+          }
+        }
+
+  thermostatEcoMode:
+    url: "{{var::baseUrl}}/{{var::projectId}}/devices/{{var::handler.deviceId}}:executeCommand"
+    method: post
+    body:
+      type: json
+      value: | 
+        {
+          "command": "sdm.devices.commands.ThermostatEco.SetMode",
+          "params": {
+            "mode": "{{var::handler.value}}"
+          }
+        }
+
+  temperatureHeat:
+    url: "{{var::baseUrl}}/{{var::projectId}}/devices/{{var::handler.deviceId}}:executeCommand"
+    method: post
+    body:
+      type: json
+      value: | 
+        {
+          "command": "sdm.devices.commands.ThermostatTemperatureSetpoint.SetHeat",
+          "params": {
+            "heatCelsius": "{{var::handler.value}}"
+          }
+        }
+
+  temperatureCool:
+    url: "{{var::baseUrl}}/{{var::projectId}}/devices/{{var::handler.deviceId}}:executeCommand"
+    method: post
+    body:
+      type: json
+      value: | 
+        {
+          "command": "sdm.devices.commands.ThermostatTemperatureSetpoint.SetCool",
+          "params": {
+            "coolCelsius": "{{var::handler.value}}"
+          }
+        }
+        
+  generateImage:
+    url: "{{var::baseUrl}}/{{var::projectId}}/devices/{{var::handler.deviceId}}:executeCommand"
+    method: post
+    body:
+      type: json
+      value: | 
+        {
+          "command": "sdm.devices.commands.CameraEventImage.GenerateImage",
+          "params": {
+            "eventId": "{{var::handler.eventId}}"
+          }
+        }
+    actions:
+      - action: function
+        function: downloadImage
+        variables:
+          - name: tagPath
+            value: "{{var::handler.tagPath}}"
+          - name: deviceId
+            value: "{{var::handler.deviceId}}"
+          - name: token
+            value: "{{jsonPath::$.results.token}}"
+          - name: url
+            value: "{{jsonPath::$.results.url}}"
+            
+  downloadImage:
+    url: "{{var::handler.url}}"
+    method: get
+    headers:
+      - key: Authorization
+        value: "{{var::handler.token}}"
+    responseType: bytes
+    actions:
+      - action: storeFile
+        fileId: "{{var::handler.deviceId}}"
+        fileName: "{{var::handler.deviceId}}"
+        extension: jpeg
+        contentType: image/jpeg
+        path: "{{var::handler.tagPath}}"

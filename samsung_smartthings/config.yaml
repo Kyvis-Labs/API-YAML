@@ -1,0 +1,57 @@
+version: 1
+
+api:
+  name: Samsung SmartThings
+  description: Interfaces with Samsung SmartThings
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/Samsung
+
+variables:
+  baseUrl:
+    default: https://api.smartthings.com/v1
+    hidden: true
+    
+authType: 
+  type: bearer
+  
+headers:
+  - key: Content-Type
+    value: application/json
+  - key: Accept
+    value: "*/*"
+        
+functions:
+  devices:
+    url: "{{var::baseUrl}}/devices"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.items[*]}}"
+            name: "{{jsonPath::item::$.label}}"
+      - action: function
+        items: "{{jsonPath::$.items[*]}}"
+        function: deviceStatus
+        variables:
+          - name: deviceId
+            value: "{{jsonPath::item::$.deviceId}}"
+          - name: deviceName
+            value: "{{jsonPath::item::$.label}}"
+
+  deviceStatus:
+    url: "{{var::baseUrl}}/devices/{{var::handler.deviceId}}/status"
+    method: get
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/items/{{var::handler.deviceName}}"
+        filter: "{{jsonPath::$.components}}"
+        type: jsonExpand

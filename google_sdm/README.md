@@ -1,0 +1,1 @@
+# Google SDM YAML

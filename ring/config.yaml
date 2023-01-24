@@ -1,0 +1,157 @@
+version: 1
+
+api:
+  name: Ring
+  description: Interfaces with Ring devices
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/Ring
+    
+variables:
+  apiVersion:
+    default: 9
+    hidden: true
+  userAgent:
+    default: Ignition/1.0
+    hidden: true
+  hardwareId:
+    uuid: true
+  baseUrl:
+    default: https://api.ring.com
+    hidden: true
+
+authType: 
+  type: oauth2
+  accessTokenUrl: https://oauth.ring.com/oauth/token
+  headers:
+  - key: User-Agent
+    value: "{{var::userAgent}}"
+  - key: hardware_id
+    value: "{{var::hardwareId}}"
+  scope: client
+  grantType: password
+  2fa: true
+  clientId: ring_official_android
+
+headers:
+  - key: User-Agent
+    value: "{{var::userAgent}}"
+  - key: Content-Type
+    value: application/json
+  
+functions:
+  session:
+    url: "{{var::baseUrl}}/clients_api/session"
+    method: post
+    body:
+      type: json
+      value: |
+        {
+          "api_version": "{{var::apiVersion}}",
+          "device": {
+            "os": "android",
+            "app_brand": "ring",
+            "hardware_id": "{{var::hardwareId}}",
+            "metadata": {
+              "device_model": "KVM",
+              "device_name": "Python",
+              "resolution": "600x800",
+              "app_version": "1.3.806",
+              "app_instalation_date": "",
+              "manufacturer": "Qemu",
+              "device_type": "desktop",
+              "architecture": "desktop",
+              "language": "en"
+            }
+          }
+        }
+  
+  devices:
+    depends: session
+    url: "{{var::baseUrl}}/clients_api/ring_devices"
+    method: get
+    params:
+      - name: api_version
+        value: "{{var::apiVersion}}"
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.doorbots[*]}}"
+            name: "{{jsonPath::item::$.description}}"
+          - items: "{{jsonPath::$.stickup_cams[*]}}"
+            name: "{{jsonPath::item::$.description}}"
+          - items: "{{jsonPath::$.chimes[*]}}"
+            name: "{{jsonPath::item::$.description}}"
+      - action: function
+        items: "{{jsonPath::$.doorbots[*]}}"
+        function: last_recording_id
+        variables:
+          - name: deviceId
+            value: "{{jsonPath::item::$.id}}"
+          - name: deviceName
+            value: "{{jsonPath::item::$.description}}"
+          - name: deviceType
+            value: doorbots
+      - action: function
+        items: "{{jsonPath::$.stickup_cams[*]}}"
+        function: last_recording_id
+        variables:
+          - name: deviceId
+            value: "{{jsonPath::item::$.id}}"
+          - name: deviceName
+            value: "{{jsonPath::item::$.description}}"
+          - name: deviceType
+            value: stickup_cams
+
+  last_recording_id:
+    url: "{{var::baseUrl}}/clients_api/doorbots/{{var::handler.deviceId}}/history"
+    method: get
+    params:
+      - name: api_version
+        value: "{{var::apiVersion}}"
+      - name: limit
+        value: 1
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data/{{var::handler.deviceType}}/{{var::handler.deviceName}}/last_event"
+        type: jsonExpand
+        filter: "{{jsonPath::$[0]}}"
+      - action: function
+        function: last_recording_url
+        runIf:
+          type: storeFileIdNotExists
+          fileId: "{{jsonPath::$[0].id}}"
+          fileName: "{{var::handler.deviceId}}"
+        variables:
+          - name: deviceId
+            value: "{{var::handler.deviceId}}"
+          - name: deviceName
+            value: "{{var::handler.deviceName}}"
+          - name: deviceType
+            value: "{{var::handler.deviceType}}"
+          - name: historyId
+            value: "{{jsonPath::$[0].id}}"
+              
+  last_recording_url:
+    url: "{{var::baseUrl}}/clients_api/dings/{{var::handler.historyId}}/recording"
+    method: get
+    redirectNoHeaders: true
+    params:
+      - name: api_version
+        value: "{{var::apiVersion}}"
+    responseType: bytes
+    actions:
+      - action: storeFile
+        fileId: "{{var::handler.historyId}}"
+        fileName: "{{var::handler.deviceId}}"
+        extension: mp4
+        contentType: video/mp4
+        path: "{{var::apiName}}/data/{{var::handler.deviceType}}/{{var::handler.deviceName}}"

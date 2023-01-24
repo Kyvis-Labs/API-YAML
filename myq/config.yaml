@@ -1,0 +1,83 @@
+version: 1
+
+api:
+  name: MyQ
+  description: Interfaces with MyQ garage door
+  version: 1.0.0
+  author: 
+    name: Travis Cox
+    email: travis@kyvislabs.com
+    url: https://github.com/Kyvis-Labs/API-YAML/MyQ
+
+variables:
+  oauthUrl:
+    default: https://partner-identity.myq-cloud.com
+    hidden: true
+  baseUrl:
+    default: https://devices.myq-cloud.com/api/v5.2
+    hidden: true
+  accountsUrl:
+    default: https://accounts.myq-cloud.com/api/v6.0/accounts
+    hidden: true
+
+authType: 
+  type: oauth2
+  grantType: authorizationCode
+  authUrl: "{{var::oauthUrl}}/connect/authorize"
+  accessTokenUrl: "{{var::oauthUrl}}/connect/token"
+  usernameInput: Email
+  passwordInput: Password
+  redirectUrl: com.myqops://ios
+  scope: MyQ_Residential offline_access
+  clientId: IOS_CGI_MYQ
+  clientSecret: VlVRMFJGaHVTM2xRVjNFeU5VSlRkdz09
+  pkce: true
+  randomUserAgent: true
+        
+functions:
+  userInfo:
+    url: "{{var::accountsUrl}}"
+    method: get
+    actions:
+      - action: variable
+        name: id
+        value: "{{jsonPath::$.accounts[0].id}}"
+  
+  devices:
+    depends: userInfo
+    url: "{{var::baseUrl}}/Accounts/{{var::userInfo.id}}/Devices"
+    method: get
+    schedule:
+      type: timer
+      duration: 5
+      unit: minutes
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/data"
+        type: jsonExpand
+        rename:
+          - items: "{{jsonPath::$.items[*]}}"
+            name: "{{jsonPath::item::$.serial_number}}"
+        tags: 
+          - items: "{{jsonPath::$.items[*]}}"
+            path: "{{item | tagPath}}/state"
+            name: door_state
+            dataType: String
+            addIfNotExists: false
+            handler: 
+              function: doorAction
+              variables:
+                - name: id
+                  value: "{{var::userInfo.id}}"
+                - name: deviceId
+                  tagPath: "{{var::handler.tagPath | split::[:-2]}}/serial_number"
+        
+  doorAction:
+    url: "{{var::baseUrl}}/Accounts/{{var::userInfo.id}}/Devices/{{var::handler.deviceId}}/actions"
+    method: put
+    body:
+      type: json
+      value: | 
+        {
+          "action_type": "{{var::handler.value}}"
+        }
