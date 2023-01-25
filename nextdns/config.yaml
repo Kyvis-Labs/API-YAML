@@ -1,0 +1,41 @@
+version: 1
+
+api:
+  name: NextDNS
+  description: Interfaces with NextDNS to provide tags regarding your account
+  version: 1.0.0
+  author: 
+    name: Kyle Chase
+    email: kyle@kyvislabs.com
+    url: https://github.com/KyvisLabs/API-YAML/nextdns
+
+variables:
+  baseUrl:
+    required: true
+    default: https://api.nextdns.io
+  accountId:
+    required: true
+  apiKey:
+    required: true
+
+authType: 
+  type: none
+
+functions:
+  account:
+    url: "{{var::baseUrl}}/profiles/{{var::accountId}}"
+    method: get
+    responseType: json
+    schedule:
+      type: timer
+      duration: 30
+      unit: seconds
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/account"
+        type: jsonExpand
+    headers:
+      - key: X-Api-Key
+        value: "{{var::apiKey}}"
+      - key: Accept
+        value: "*/*"

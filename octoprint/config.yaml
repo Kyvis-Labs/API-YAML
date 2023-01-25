@@ -1,0 +1,64 @@
+version: 1
+
+api:
+  name: Octoprint
+  description: Interfaces with Octoprint for printer information
+  version: 1.0.0
+  author: 
+    name: Kyle Chase
+    email: kyle@kyvislabs.com
+    url: https://github.com/KyvisLabs/API-YAML/octoprint
+
+variables:
+  baseUrl:
+   required: true
+  apikey:
+    hidden: false
+    sensitive: false
+
+functions:
+  printer:
+    url: "{{var::baseUrl}}/api/printer"
+    method: get
+    responseType: json
+    schedule:
+      type: timer
+      duration: 5
+      unit: seconds
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/printer"
+        type: jsonExpand
+    headers:
+      - key: X-Api-Key
+        value: "{{var::apikey}}"
+  server:
+    url: "{{var::baseUrl}}/api/version"
+    method: get
+    responseType: json
+    schedule:
+      type: timer
+      duration: 5
+      unit: seconds
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/version"
+        type: jsonExpand
+    headers:
+      - key: X-Api-Key
+        value: "{{var::apikey}}"
+  connection:
+    url: "{{var::baseUrl}}/api/connection"
+    method: get
+    responseType: json
+    schedule:
+      type: timer
+      duration: 5
+      unit: seconds
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/connection"
+        type: jsonExpand
+    headers:
+      - key: X-Api-Key
+        value: "{{var::apikey}}"

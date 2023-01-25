@@ -1,0 +1,44 @@
+version: 1
+
+api:
+  name: Tailscale
+  description: Interfaces with Tailscale to provide tags regarding your tailnet
+  version: 1.0.0
+  author: 
+    name: Kyle Chase
+    email: kyle@kyvislabs.com
+    url: https://github.com/KyvisLabs/API-YAML/tailscale
+
+variables:
+  baseUrl:
+    required: true
+    default: https://api.tailscale.com
+  tailnet:
+    required: true
+  fields:
+    default: all
+    required: true
+
+authType:
+  type: basic
+
+functions:
+  devices:
+    url: "{{var::baseUrl}}/api/v2/tailnet/{{var::tailnet}}/devices"
+    method: get
+    responseType: json
+    schedule:
+      type: timer
+      duration: 30
+      unit: seconds
+    actions:
+      - action: tag
+        path: "{{var::apiName}}/devices"
+        type: jsonExpand
+        filter: "{{jsonPath::$.devices}}"
+        rename:
+          - items: "{{jsonPath::$.[*]}}"
+            name: "{{jsonPath::item::$.hostname}}"
+    params:
+      - name: fields
+        value: "{{var::fields}}"
