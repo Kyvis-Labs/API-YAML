@@ -33,12 +33,18 @@ functions:
       unit: seconds
     actions:
       - action: tag
-        path: "{{var::apiName}}/devices"
+        path: "{{var::apiName}}"
         type: jsonExpand
-        filter: "{{jsonPath::$.devices}}"
         rename:
-          - items: "{{jsonPath::$.[*]}}"
+          - items: "{{jsonPath::$.devices[*]}}"
             name: "{{jsonPath::item::$.hostname}}"
+        tags:
+          - items: "{{jsonPath::$.devices[*]}}"
+            path: "{{item | tagPath}}"
+            name: connected
+            dataType: Boolean
+            expression: |
+              dateDiff(toDate(replace(replace({[.]lastSeen}, "T", " "), "Z", "")),now(0),'hour')<=24
     params:
       - name: fields
         value: "{{var::fields}}"
